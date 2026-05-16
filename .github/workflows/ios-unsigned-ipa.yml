@@ -34,20 +34,36 @@ jobs:
           echo "Available Xcode apps:"
           ls -1 /Applications | grep -E '^Xcode' || true
 
-          XCODE_APP="$(
-            find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' \
-              | grep -vi beta \
-              | sort \
-              | tail -n 1 || true
+          XCODE_APP="$(python3 - <<'PY'
+          import glob
+          import os
+          import re
+
+          apps = glob.glob('/Applications/Xcode*.app')
+
+          def version_key(path):
+              name = os.path.basename(path).lower()
+              numbers = tuple(int(value) for value in re.findall(r'\d+', name))
+              stable = 'beta' not in name
+              return (stable, numbers, name)
+
+          xcode_26 = [
+              app for app in apps
+              if os.path.basename(app).startswith('Xcode_26')
+          ]
+          stable_26 = [
+              app for app in xcode_26
+              if 'beta' not in os.path.basename(app).lower()
+          ]
+
+          candidates = stable_26 or xcode_26
+          if not candidates and '/Applications/Xcode.app' in apps:
+              candidates = ['/Applications/Xcode.app']
+
+          if candidates:
+              print(sorted(candidates, key=version_key)[-1])
+          PY
           )"
-
-          if [ -z "$XCODE_APP" ]; then
-            XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort | tail -n 1 || true)"
-          fi
-
-          if [ -z "$XCODE_APP" ] && [ -d /Applications/Xcode.app ]; then
-            XCODE_APP="/Applications/Xcode.app"
-          fi
 
           if [ -z "$XCODE_APP" ]; then
             echo "::error::No Xcode app found on this runner."
@@ -58,14 +74,18 @@ jobs:
           sudo xcode-select -s "$XCODE_APP/Contents/Developer"
 
           xcode-select -p
-          xcodebuild -version
+          XCODE_VERSION="$(xcodebuild -version)"
+          printf '%s\n' "$XCODE_VERSION"
 
-          if ! xcodebuild -version | grep -q '^Xcode 26'; then
+          case "$XCODE_VERSION" in
+            Xcode\ 26*) ;;
+            *)
             echo "::error::Expo SDK 55 needs Xcode 26.x here. The selected Xcode is:"
-            xcodebuild -version
+            printf '%s\n' "$XCODE_VERSION"
             echo "Use runs-on: macos-26 and make sure this updated workflow is committed and pushed."
             exit 1
-          fi
+              ;;
+          esac
 
       - name: Show tool versions
         run: |
