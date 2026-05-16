@@ -34,7 +34,17 @@ jobs:
           echo "Available Xcode apps:"
           ls -1 /Applications | grep -E '^Xcode' || true
 
-          XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort | tail -n 1)"
+          XCODE_APP="$(
+            find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' \
+              | grep -vi beta \
+              | sort \
+              | tail -n 1 || true
+          )"
+
+          if [ -z "$XCODE_APP" ]; then
+            XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort | tail -n 1 || true)"
+          fi
+
           if [ -z "$XCODE_APP" ] && [ -d /Applications/Xcode.app ]; then
             XCODE_APP="/Applications/Xcode.app"
           fi

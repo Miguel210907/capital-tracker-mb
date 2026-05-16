@@ -10,24 +10,24 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "latest",
-    "expo": "latest",
-    "expo-document-picker": "latest",
-    "expo-file-system": "latest",
-    "expo-local-authentication": "latest",
-    "expo-crypto": "latest",
-    "expo-router": "latest",
-    "expo-secure-store": "latest",
-    "expo-sharing": "latest",
-    "expo-sqlite": "latest",
-    "react": "latest",
-    "react-native": "latest",
-    "react-native-safe-area-context": "latest",
-    "react-native-screens": "latest",
-    "xlsx": "latest"
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "55.0.24",
+    "expo-crypto": "55.0.15",
+    "expo-document-picker": "55.0.13",
+    "expo-file-system": "55.0.20",
+    "expo-local-authentication": "55.0.14",
+    "expo-router": "55.0.14",
+    "expo-secure-store": "55.0.14",
+    "expo-sharing": "55.0.19",
+    "expo-sqlite": "55.0.16",
+    "react": "19.2.0",
+    "react-native": "0.83.6",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
-    "@types/react": "latest",
-    "typescript": "latest"
+    "@types/react": "19.2.14",
+    "typescript": "5.9.3"
   }
 }
