@@ -34,20 +34,28 @@ jobs:
           echo "Available Xcode apps:"
           ls -1 /Applications | grep -E '^Xcode' || true
 
-          for app in \
-            /Applications/Xcode_26.4.app \
-            /Applications/Xcode_26.3.app \
-            /Applications/Xcode_26.2.app \
-            /Applications/Xcode.app
-          do
-            if [ -d "$app" ]; then
-              sudo xcode-select -s "$app/Contents/Developer"
-              break
-            fi
-          done
+          XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort | tail -n 1)"
+          if [ -z "$XCODE_APP" ] && [ -d /Applications/Xcode.app ]; then
+            XCODE_APP="/Applications/Xcode.app"
+          fi
+
+          if [ -z "$XCODE_APP" ]; then
+            echo "::error::No Xcode app found on this runner."
+            exit 1
+          fi
+
+          echo "Selecting $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
 
           xcode-select -p
           xcodebuild -version
+
+          if ! xcodebuild -version | grep -q '^Xcode 26'; then
+            echo "::error::Expo SDK 55 needs Xcode 26.x here. The selected Xcode is:"
+            xcodebuild -version
+            echo "Use runs-on: macos-26 and make sure this updated workflow is committed and pushed."
+            exit 1
+          fi
 
       - name: Show tool versions
         run: |

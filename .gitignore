@@ -10,6 +10,7 @@ android/
 build/
 DerivedData/
 tmp-xcodebuild-log/
+tmp-xcodebuild-log-*/
 *.ipa
 *.xcarchive
 
