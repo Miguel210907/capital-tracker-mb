@@ -28,45 +28,44 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Select stable Xcode 26
+      - name: Select pinned stable Xcode 26
         run: |
           set -euo pipefail
           echo "Available Xcode apps:"
           ls -1 /Applications | grep -E '^Xcode' || true
 
-          XCODE_APP="$(python3 - <<'PY'
-          import glob
-          import os
-          import re
+          # Do not pick "latest" automatically. Xcode 26.5 beta currently makes
+          # storyboard compilation fail on GitHub runners with missing iOS 26.5 platform errors.
+          XCODE_APP=""
+          for app in \
+            /Applications/Xcode_26.4.1.app \
+            /Applications/Xcode_26.4.app \
+            /Applications/Xcode_26.3.0.app \
+            /Applications/Xcode_26.3.app \
+            /Applications/Xcode_26.2.0.app \
+            /Applications/Xcode_26.2.app \
+            /Applications/Xcode_26.1.1.app \
+            /Applications/Xcode_26.1.app \
+            /Applications/Xcode_26.0.1.app \
+            /Applications/Xcode_26.0.app
+          do
+            if [ -d "$app" ]; then
+              XCODE_APP="$app"
+              break
+            fi
+          done
 
-          apps = glob.glob('/Applications/Xcode*.app')
-
-          def version_key(path):
-              name = os.path.basename(path).lower()
-              numbers = tuple(int(value) for value in re.findall(r'\d+', name))
-              stable = 'beta' not in name
-              return (stable, numbers, name)
-
-          xcode_26 = [
-              app for app in apps
-              if os.path.basename(app).startswith('Xcode_26')
-          ]
-          stable_26 = [
-              app for app in xcode_26
-              if 'beta' not in os.path.basename(app).lower()
-          ]
-
-          candidates = stable_26 or xcode_26
-          if not candidates and '/Applications/Xcode.app' in apps:
-              candidates = ['/Applications/Xcode.app']
-
-          if candidates:
-              print(sorted(candidates, key=version_key)[-1])
-          PY
-          )"
+          if [ -z "$XCODE_APP" ] && [ -d /Applications/Xcode.app ]; then
+            XCODE_APP="/Applications/Xcode.app"
+          fi
 
           if [ -z "$XCODE_APP" ]; then
             echo "::error::No Xcode app found on this runner."
+            exit 1
+          fi
+
+          if printf '%s\n' "$XCODE_APP" | grep -qi 'beta'; then
+            echo "::error::Refusing beta Xcode: $XCODE_APP"
             exit 1
           fi
 
@@ -78,11 +77,12 @@ jobs:
           printf '%s\n' "$XCODE_VERSION"
 
           case "$XCODE_VERSION" in
-            Xcode\ 26*) ;;
+            Xcode\ 26.0*|Xcode\ 26.1*|Xcode\ 26.2*|Xcode\ 26.3*|Xcode\ 26.4*) ;;
             *)
-            echo "::error::Expo SDK 55 needs Xcode 26.x here. The selected Xcode is:"
+            echo "::error::This workflow intentionally uses stable Xcode 26.0-26.4 only. The selected Xcode is:"
             printf '%s\n' "$XCODE_VERSION"
-            echo "Use runs-on: macos-26 and make sure this updated workflow is committed and pushed."
+            echo "Do not use Xcode 26.5 beta for this unsigned IPA build."
+            echo "Make sure this updated workflow is committed and pushed."
             exit 1
               ;;
           esac
