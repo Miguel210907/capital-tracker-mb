@@ -1,0 +1,33 @@
+{
+  "name": "capital-tracker-mb",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "latest",
+    "expo": "latest",
+    "expo-document-picker": "latest",
+    "expo-file-system": "latest",
+    "expo-local-authentication": "latest",
+    "expo-crypto": "latest",
+    "expo-router": "latest",
+    "expo-secure-store": "latest",
+    "expo-sharing": "latest",
+    "expo-sqlite": "latest",
+    "react": "latest",
+    "react-native": "latest",
+    "react-native-safe-area-context": "latest",
+    "react-native-screens": "latest",
+    "xlsx": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "typescript": "latest"
+  }
+}

@@ -1,0 +1,118 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-ios-unsigned-ipa:
+    name: Build unsigned IPA for AltStore
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+          xcodebuild -version
+          pod --version
+
+      - name: Install JavaScript dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Generate native iOS project
+        env:
+          EXPO_NO_GIT_STATUS: "1"
+          CI: "1"
+        run: npx expo prebuild --platform ios --clean --non-interactive --no-install
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Detect Xcode workspace and scheme
+        id: xcode
+        run: |
+          WORKSPACE="$(find ios -name "*.xcworkspace" -type d -prune | head -n 1)"
+          if [ -z "$WORKSPACE" ]; then
+            echo "No .xcworkspace found under ios/"
+            exit 1
+          fi
+
+          SCHEME="$(basename "$WORKSPACE" .xcworkspace)"
+          if ! xcodebuild -list -workspace "$WORKSPACE" | grep -q "^[[:space:]]*$SCHEME$"; then
+            SCHEME="$(xcodebuild -list -json -workspace "$WORKSPACE" | ruby -rjson -e 'data = JSON.parse(STDIN.read); schemes = data.dig("workspace", "schemes") || []; puts(schemes.find { |s| !s.end_with?("Tests") } || schemes.first || "")')"
+          fi
+
+          if [ -z "$SCHEME" ]; then
+            echo "No Xcode scheme found"
+            exit 1
+          fi
+
+          echo "workspace=$WORKSPACE" >> "$GITHUB_OUTPUT"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+          echo "Using workspace: $WORKSPACE"
+          echo "Using scheme: $SCHEME"
+
+      - name: Build unsigned .app for iPhone
+        run: |
+          set -euo pipefail
+          WORKSPACE="${{ steps.xcode.outputs.workspace }}"
+          SCHEME="${{ steps.xcode.outputs.scheme }}"
+          DERIVED_DATA="$PWD/build/DerivedData"
+          BUILD_DIR="$PWD/build/xcode"
+
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$DERIVED_DATA" \
+            -destination generic/platform=iOS \
+            clean build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=NO \
+            SKIP_INSTALL=NO \
+            BUILD_DIR="$BUILD_DIR"
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find build -type d -path "*/Release-iphoneos/*.app" -print | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app found after xcodebuild"
+            find build -type d -name "*.app" -print
+            exit 1
+          fi
+
+          rm -rf ipa Payload
+          mkdir -p Payload ipa
+          cp -R "$APP_PATH" Payload/
+          /usr/bin/zip -qry "ipa/CapitalTrackerMB-unsigned.ipa" Payload
+          shasum -a 256 "ipa/CapitalTrackerMB-unsigned.ipa" > "ipa/CapitalTrackerMB-unsigned.ipa.sha256"
+          ls -lh ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CapitalTrackerMB-unsigned-ipa
+          path: |
+            ipa/CapitalTrackerMB-unsigned.ipa
+            ipa/CapitalTrackerMB-unsigned.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14

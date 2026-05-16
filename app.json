@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Capital Tracker MB",
+    "slug": "capital-tracker-mb",
+    "scheme": "capitaltrackermb",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "platforms": ["ios"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.local.capitaltrackermb",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Capital Tracker MB usa Face ID si activas la proteccion local de la app."
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Capital Tracker MB usa Face ID si activas la proteccion local de la app."
+        }
+      ]
+    ]
+  }
+}
