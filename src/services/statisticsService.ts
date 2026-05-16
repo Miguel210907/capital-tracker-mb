@@ -42,6 +42,11 @@ export interface AdvancedStatistics {
   totalRoi: number;
   currentBlockedMoney: number;
   matchedExpectedActualDiff: number;
+  pendingExpectedProfitMonth: number;
+  pendingExpectedProfitTotal: number;
+  pendingCompletedCount: number;
+  pendingCancelledCount: number;
+  projectedCapitalWithPending: number;
 }
 
 interface MonthlyRow {
@@ -124,6 +129,11 @@ export async function getAdvancedStatistics(): Promise<AdvancedStatistics> {
     totalExposure,
     blockedMoney,
     matchedDiff,
+    pendingMonth,
+    pendingTotal,
+    pendingCompleted,
+    pendingCancelled,
+    currentCapital,
   ] = await Promise.all([
     getRoiStats(
       `SELECT COALESCE(a.name, 'Sin cuenta') AS label, SUM(b.profit_loss) AS profit, SUM(b.stake) AS stake
@@ -185,6 +195,26 @@ export async function getAdvancedStatistics(): Promise<AdvancedStatistics> {
        FROM matched_bets
        WHERE status = 'liquidada'`,
     ),
+    getFirst<{ total: number | null }>(
+      `SELECT SUM(expected_profit) AS total
+       FROM pending_items
+       WHERE status IN ('pendiente', 'en_curso', 'vencido')
+         AND expected_date BETWEEN date('now', 'start of month') AND date('now', 'start of month', '+1 month', '-1 day')`,
+    ),
+    getFirst<{ total: number | null }>(
+      `SELECT SUM(expected_profit) AS total
+       FROM pending_items
+       WHERE status IN ('pendiente', 'en_curso', 'vencido')`,
+    ),
+    getFirst<{ total: number | null }>(
+      `SELECT COUNT(*) AS total FROM pending_items WHERE status = 'completado'`,
+    ),
+    getFirst<{ total: number | null }>(
+      `SELECT COUNT(*) AS total FROM pending_items WHERE status = 'cancelado'`,
+    ),
+    getFirst<{ total: number | null }>(
+      `SELECT SUM(current_balance) AS total FROM accounts`,
+    ),
   ]);
 
   return {
@@ -198,6 +228,13 @@ export async function getAdvancedStatistics(): Promise<AdvancedStatistics> {
     totalRoi: calculateRoi(totalExposure?.profit ?? 0, totalExposure?.stake ?? 0),
     currentBlockedMoney: roundMoney(blockedMoney?.total ?? 0),
     matchedExpectedActualDiff: roundMoney(matchedDiff?.total ?? 0),
+    pendingExpectedProfitMonth: roundMoney(pendingMonth?.total ?? 0),
+    pendingExpectedProfitTotal: roundMoney(pendingTotal?.total ?? 0),
+    pendingCompletedCount: pendingCompleted?.total ?? 0,
+    pendingCancelledCount: pendingCancelled?.total ?? 0,
+    projectedCapitalWithPending: roundMoney(
+      (currentCapital?.total ?? 0) + (pendingTotal?.total ?? 0),
+    ),
   };
 }
 

@@ -26,6 +26,10 @@ import {
   calculateMatchedExpected,
   calculateMatchedSettlement,
 } from './calculations';
+import {
+  completePendingItemForMatchedBet,
+  createPendingItemInTransaction,
+} from './pendingService';
 
 export interface CreateMatchedBetInput {
   date?: string;
@@ -44,10 +48,17 @@ export interface CreateMatchedBetInput {
   freebetAmount?: number;
   notes?: string | null;
   importHash?: string | null;
+  createPendingItem?: boolean;
+  pendingExpectedDate?: string | null;
 }
 
 export interface UpdatePendingMatchedBetInput extends Partial<CreateMatchedBetInput> {
   id: string;
+}
+
+export interface UpdateMatchedBetInput extends Partial<CreateMatchedBetInput> {
+  id: string;
+  allowSettledEdit?: boolean;
 }
 
 export interface SettleMatchedBetInput {
@@ -159,6 +170,30 @@ export async function createMatchedBet(input: CreateMatchedBetInput): Promise<Ma
 
     await insertMatchedBet(db, matchedBet);
     await insertMatchedBetOpeningTransactions(db, matchedBet);
+
+    if (input.createPendingItem) {
+      await createPendingItemInTransaction(
+        db,
+        {
+          title: matchedBet.source
+            ? `${matchedBet.source}: ${matchedBet.event}`
+            : matchedBet.event,
+          type: 'matched_betting',
+          status: 'en_curso',
+          createdDate: matchedBet.date,
+          expectedDate: input.pendingExpectedDate ?? matchedBet.date,
+          accountId: matchedBet.bookmaker_account_id,
+          relatedMatchedBetId: matchedBet.id,
+          investmentRequired: matchedBet.back_stake + matchedBet.lay_liability,
+          expectedIncome: Math.max(0, matchedBet.expected_profit),
+          expectedExpense: Math.max(0, -matchedBet.expected_profit),
+          expectedProfit: matchedBet.expected_profit,
+          priority: 2,
+          notes: matchedBet.notes,
+        },
+        false,
+      );
+    }
 
     await createAuditLog(db, {
       action: 'create',
@@ -290,6 +325,211 @@ export async function updatePendingMatchedBet(
       newValue: next,
     });
 
+    if (next.status === 'liquidada') {
+      await completePendingItemForMatchedBet(db, next);
+    }
+
+    return next;
+  });
+}
+
+export async function updateMatchedBet(input: UpdateMatchedBetInput): Promise<MatchedBet> {
+  assertRequired(input.id, 'Matched bet');
+
+  return withTransaction(async (db) => {
+    const previous = await db.getFirstAsync<MatchedBet>(
+      'SELECT * FROM matched_bets WHERE id = ?',
+      [input.id],
+    );
+
+    if (!previous) {
+      throw new Error('Matched bet no encontrada.');
+    }
+
+    if (previous.status !== 'pendiente' && !input.allowSettledEdit) {
+      throw new Error('La matched bet ya esta liquidada. Confirma la edicion para recalcular movimientos.');
+    }
+
+    const nextInput: CreateMatchedBetInput = {
+      date: input.date ?? previous.date,
+      event: input.event ?? previous.event,
+      sport: input.sport !== undefined ? input.sport : previous.sport,
+      bookmakerAccountId: input.bookmakerAccountId ?? previous.bookmaker_account_id,
+      exchangeAccountId: input.exchangeAccountId ?? previous.exchange_account_id,
+      source: input.source !== undefined ? input.source : previous.source,
+      offerType: input.offerType ?? previous.offer_type,
+      backSelection:
+        input.backSelection !== undefined ? input.backSelection : previous.back_selection,
+      backOdds: input.backOdds ?? previous.back_odds,
+      backStake: input.backStake ?? previous.back_stake,
+      layOdds: input.layOdds ?? previous.lay_odds,
+      layStake: input.layStake ?? previous.lay_stake,
+      layCommission: input.layCommission ?? previous.lay_commission,
+      freebetAmount: input.freebetAmount ?? previous.freebet_amount,
+      notes: input.notes !== undefined ? input.notes : previous.notes,
+      importHash: previous.import_hash,
+    };
+
+    validateMatchedBetInput(nextInput);
+
+    const previousLiquidations = await db.getAllAsync<Transaction>(
+      `SELECT * FROM transactions
+       WHERE related_matched_bet_id = ?
+         AND type = 'liquidacion_matched_betting'`,
+      [previous.id],
+    );
+    const previousBookmakerLiquidation = previousLiquidations
+      .filter((transaction) => transaction.account_id === previous.bookmaker_account_id)
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
+    const previousExchangeLiquidation = previousLiquidations
+      .filter((transaction) => transaction.account_id === previous.exchange_account_id)
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
+
+    await deleteLinkedMatchedTransactions(db, previous.id);
+
+    const expected = calculateMatchedExpected({
+      offerType: nextInput.offerType,
+      backOdds: nextInput.backOdds,
+      backStake: nextInput.backStake,
+      layOdds: nextInput.layOdds,
+      layStake: nextInput.layStake,
+      layCommission: nextInput.layCommission ?? 0,
+      freebetAmount: nextInput.freebetAmount ?? 0,
+    });
+
+    let actualProfit = previous.status === 'liquidada' ? previous.actual_profit : 0;
+    let expectedActualDiff = previous.status === 'liquidada' ? previous.expected_actual_diff : 0;
+    let roi = previous.status === 'liquidada' ? previous.roi : expected.roi;
+    let bookmakerLiquidationAmount = 0;
+    let exchangeLiquidationAmount = 0;
+
+    if (previous.status === 'liquidada') {
+      const settlement = calculateMatchedSettlement({
+        offerType: nextInput.offerType,
+        backOdds: nextInput.backOdds,
+        backStake: nextInput.backStake,
+        layOdds: nextInput.layOdds,
+        layStake: nextInput.layStake,
+        layCommission: nextInput.layCommission ?? 0,
+        freebetAmount: nextInput.freebetAmount ?? 0,
+        result: previous.result ?? 'manual',
+        manualBookmakerAmount: previousBookmakerLiquidation,
+        manualExchangeAmount: previousExchangeLiquidation,
+      });
+      actualProfit = settlement.actualProfit;
+      expectedActualDiff = settlement.expectedActualDiff;
+      roi = settlement.roi;
+      bookmakerLiquidationAmount = settlement.bookmakerLiquidationAmount;
+      exchangeLiquidationAmount = settlement.exchangeLiquidationAmount;
+    }
+
+    const next: MatchedBet = {
+      ...previous,
+      date: nextInput.date ?? previous.date,
+      event: nextInput.event.trim(),
+      sport: nextInput.sport ?? null,
+      bookmaker_account_id: nextInput.bookmakerAccountId,
+      exchange_account_id: nextInput.exchangeAccountId,
+      source: nextInput.source ?? null,
+      offer_type: nextInput.offerType,
+      back_selection: nextInput.backSelection ?? null,
+      back_odds: roundMoney(nextInput.backOdds),
+      back_stake: roundMoney(nextInput.backStake),
+      lay_odds: roundMoney(nextInput.layOdds),
+      lay_stake: roundMoney(nextInput.layStake),
+      lay_commission: roundMoney(nextInput.layCommission ?? 0),
+      lay_liability: expected.layLiability,
+      freebet_amount: roundMoney(nextInput.freebetAmount ?? 0),
+      expected_profit: expected.expectedProfit,
+      actual_profit: roundMoney(actualProfit),
+      expected_actual_diff: roundMoney(expectedActualDiff),
+      roi: roundMoney(roi),
+      notes: nextInput.notes ?? null,
+      updated_at: nowIso(),
+    };
+
+    await db.runAsync(
+      `UPDATE matched_bets
+       SET date = ?, event = ?, sport = ?, bookmaker_account_id = ?, exchange_account_id = ?,
+           source = ?, offer_type = ?, back_selection = ?, back_odds = ?, back_stake = ?,
+           lay_odds = ?, lay_stake = ?, lay_commission = ?, lay_liability = ?,
+           freebet_amount = ?, expected_profit = ?, actual_profit = ?,
+           expected_actual_diff = ?, roi = ?, notes = ?, updated_at = ?
+       WHERE id = ?`,
+      sqlParams([
+        next.date,
+        next.event,
+        next.sport,
+        next.bookmaker_account_id,
+        next.exchange_account_id,
+        next.source,
+        next.offer_type,
+        next.back_selection,
+        next.back_odds,
+        next.back_stake,
+        next.lay_odds,
+        next.lay_stake,
+        next.lay_commission,
+        next.lay_liability,
+        next.freebet_amount,
+        next.expected_profit,
+        next.actual_profit,
+        next.expected_actual_diff,
+        next.roi,
+        next.notes,
+        next.updated_at,
+        next.id,
+      ]),
+    );
+
+    await insertMatchedBetOpeningTransactions(db, next);
+
+    if (bookmakerLiquidationAmount !== 0) {
+      await insertTransactionWithBalance(
+        db,
+        {
+          date: next.settled_at?.slice(0, 10) ?? todayDbDate(),
+          accountId: next.bookmaker_account_id,
+          type: 'liquidacion_matched_betting',
+          amount: bookmakerLiquidationAmount,
+          category: 'liquidacion matched betting',
+          description: `Liquidacion matched betting: ${next.event}`,
+          relatedMatchedBetId: next.id,
+          notes: next.notes,
+        },
+        false,
+      );
+    }
+
+    if (exchangeLiquidationAmount !== 0) {
+      await insertTransactionWithBalance(
+        db,
+        {
+          date: next.settled_at?.slice(0, 10) ?? todayDbDate(),
+          accountId: next.exchange_account_id,
+          type: 'liquidacion_matched_betting',
+          amount: exchangeLiquidationAmount,
+          category: 'liquidacion matched betting',
+          description: `Liquidacion exchange: ${next.event}`,
+          relatedMatchedBetId: next.id,
+          notes: next.notes,
+        },
+        false,
+      );
+    }
+
+    await createAuditLog(db, {
+      action: 'update',
+      tableName: 'matched_bets',
+      recordId: next.id,
+      oldValue: previous,
+      newValue: next,
+    });
+
+    if (next.status === 'liquidada') {
+      await completePendingItemForMatchedBet(db, next);
+    }
+
     return next;
   });
 }
@@ -394,6 +634,8 @@ export async function settleMatchedBet(input: SettleMatchedBetInput): Promise<Ma
       oldValue: previous,
       newValue: next,
     });
+
+    await completePendingItemForMatchedBet(db, next);
 
     return next;
   });

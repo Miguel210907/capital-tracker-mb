@@ -26,6 +26,7 @@ export type CsvTableName =
   | 'transfers'
   | 'bets'
   | 'matched_bets'
+  | 'pending_items'
   | 'categories'
   | 'resumen_mensual';
 
@@ -257,6 +258,54 @@ const CSV_TABLE_CONFIGS: CsvTableConfig[] = [
       'roi',
     ],
     nullableColumns: ['sport', 'source', 'back_selection', 'result', 'settled_at', 'notes', 'import_hash'],
+    hasImportHash: true,
+  },
+  {
+    tableName: 'pending_items',
+    label: 'Pendientes',
+    prefix: 'pen',
+    columns: [
+      'id',
+      'title',
+      'type',
+      'status',
+      'created_date',
+      'expected_date',
+      'account_id',
+      'related_bet_id',
+      'related_matched_bet_id',
+      'related_transaction_id',
+      'investment_required',
+      'expected_income',
+      'expected_expense',
+      'expected_profit',
+      'actual_profit',
+      'priority',
+      'recurrence',
+      'notes',
+      'import_hash',
+      'created_at',
+      'updated_at',
+    ],
+    requiredColumns: ['title', 'type'],
+    numericColumns: [
+      'investment_required',
+      'expected_income',
+      'expected_expense',
+      'expected_profit',
+      'actual_profit',
+      'priority',
+    ],
+    nullableColumns: [
+      'expected_date',
+      'account_id',
+      'related_bet_id',
+      'related_matched_bet_id',
+      'related_transaction_id',
+      'recurrence',
+      'notes',
+      'import_hash',
+    ],
     hasImportHash: true,
   },
   {
@@ -530,7 +579,15 @@ export async function importXlsxPreview(
   }
 
   const orderedSheets = [...preview.sheets].sort((a, b) => {
-    const order = ['accounts', 'categories', 'bets', 'matched_bets', 'transfers', 'transactions'];
+    const order = [
+      'accounts',
+      'categories',
+      'bets',
+      'matched_bets',
+      'transfers',
+      'transactions',
+      'pending_items',
+    ];
     return order.indexOf(a.tableName ?? '') - order.indexOf(b.tableName ?? '');
   });
 
@@ -794,6 +851,24 @@ function applyComputedDefaults(
     row.actual_profit = roundMoney(Number(row.actual_profit ?? 0));
     row.expected_actual_diff = roundMoney(Number(row.expected_actual_diff ?? 0));
   }
+
+  if (config.tableName === 'pending_items') {
+    row.status = row.status || 'pendiente';
+    row.created_date = row.created_date || todayDbDate();
+    row.investment_required = roundMoney(Number(row.investment_required ?? 0));
+    row.expected_income = roundMoney(Number(row.expected_income ?? 0));
+    row.expected_expense = roundMoney(Number(row.expected_expense ?? 0));
+    row.expected_profit =
+      Number(row.expected_profit ?? 0) === 0
+        ? roundMoney(
+            Number(row.expected_income ?? 0) -
+              Number(row.expected_expense ?? 0) -
+              Number(row.investment_required ?? 0),
+          )
+        : roundMoney(Number(row.expected_profit ?? 0));
+    row.actual_profit = roundMoney(Number(row.actual_profit ?? 0));
+    row.priority = Number(row.priority ?? 2) || 2;
+  }
 }
 
 async function insertCsvRow(
@@ -820,6 +895,7 @@ async function clearTableForReplace(
 ): Promise<void> {
   if (tableName === 'accounts') {
     await db.runAsync('DELETE FROM transactions');
+    await db.runAsync('DELETE FROM pending_items');
     await db.runAsync('DELETE FROM transfers');
     await db.runAsync('DELETE FROM bets');
     await db.runAsync('DELETE FROM matched_bets');
@@ -829,18 +905,21 @@ async function clearTableForReplace(
 
   if (tableName === 'bets') {
     await db.runAsync('DELETE FROM transactions WHERE related_bet_id IS NOT NULL');
+    await db.runAsync('UPDATE pending_items SET related_bet_id = NULL');
     await db.runAsync('DELETE FROM bets');
     return;
   }
 
   if (tableName === 'matched_bets') {
     await db.runAsync('DELETE FROM transactions WHERE related_matched_bet_id IS NOT NULL');
+    await db.runAsync('UPDATE pending_items SET related_matched_bet_id = NULL');
     await db.runAsync('DELETE FROM matched_bets');
     return;
   }
 
   if (tableName === 'transfers') {
     await db.runAsync('DELETE FROM transactions WHERE transfer_id IS NOT NULL');
+    await db.runAsync('UPDATE pending_items SET related_transaction_id = NULL');
     await db.runAsync('DELETE FROM transfers');
     return;
   }

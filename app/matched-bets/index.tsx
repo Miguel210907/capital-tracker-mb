@@ -61,10 +61,15 @@ export default function MatchedBetsScreen() {
 
           {matchedBet.status === 'pendiente' ? (
             <View style={styles.actions}>
+              <AppButton title="Editar" onPress={() => router.push(`/matched-bets/new?id=${matchedBet.id}`)} variant="secondary" />
               <AppButton title="Gana back" onPress={() => handleSettle(matchedBet.id, 'gana_back')} variant="secondary" />
               <AppButton title="Pierde back" onPress={() => handleSettle(matchedBet.id, 'pierde_back')} variant="secondary" />
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.actions}>
+              <AppButton title="Editar" onPress={() => router.push(`/matched-bets/new?id=${matchedBet.id}`)} variant="secondary" />
+            </View>
+          )}
         </AppCard>
       ))}
     </Screen>

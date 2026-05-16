@@ -58,7 +58,10 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="dashboard" options={{ title: 'Capital Tracker MB' }} />
+          <Stack.Screen name="pending/index" options={{ title: 'Pendientes' }} />
+          <Stack.Screen name="pending/new" options={{ title: 'Pendiente' }} />
           <Stack.Screen name="accounts/index" options={{ title: 'Cuentas' }} />
           <Stack.Screen name="accounts/new" options={{ title: 'Nueva cuenta' }} />
           <Stack.Screen name="accounts/[id]" options={{ title: 'Detalle de cuenta' }} />

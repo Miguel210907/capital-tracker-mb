@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Text } from 'react-native';
 
 import { AppButton } from '../../src/components/AppButton';
@@ -14,6 +14,10 @@ import {
   createIncome,
   createTransaction,
   createTransfer,
+  getTransactionById,
+  getTransferById,
+  updateTransaction,
+  updateTransfer,
 } from '../../src/services/transactionService';
 import { colors } from '../../src/theme/colors';
 import { parseSpanishDateInput, todaySpanishDate } from '../../src/utils/dates';
@@ -30,13 +34,17 @@ function normalizeMode(value: string | undefined): MovementMode {
 
 export default function NewTransactionScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ type?: string; accountId?: string }>();
+  const params = useLocalSearchParams<{ type?: string; accountId?: string; id?: string; transferId?: string }>();
+  const editingId = typeof params.id === 'string' ? params.id : '';
+  const editingTransferId = typeof params.transferId === 'string' ? params.transferId : '';
   const { data: accounts, loading } = useAccounts();
-  const [mode, setMode] = useState<MovementMode>(normalizeMode(params.type));
+  const [loadingRecord, setLoadingRecord] = useState(Boolean(editingId || editingTransferId));
+  const [mode, setMode] = useState<MovementMode>(editingTransferId ? 'transferencia' : normalizeMode(params.type));
   const [date, setDate] = useState(todaySpanishDate());
   const [accountId, setAccountId] = useState(params.accountId ?? '');
   const [toAccountId, setToAccountId] = useState('');
   const [amount, setAmount] = useState('');
+  const [fee, setFee] = useState('0');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
@@ -51,6 +59,60 @@ export default function NewTransactionScreen() {
     [accounts],
   );
 
+  useEffect(() => {
+    if (!editingId && !editingTransferId) {
+      return;
+    }
+
+    async function loadRecord() {
+      try {
+        if (editingTransferId) {
+          const transfer = await getTransferById(editingTransferId);
+          if (!transfer) {
+            Alert.alert('No encontrada', 'La transferencia ya no existe.');
+            router.back();
+            return;
+          }
+
+          setMode('transferencia');
+          setDate(formatForInput(transfer.date));
+          setAccountId(transfer.from_account_id);
+          setToAccountId(transfer.to_account_id);
+          setAmount(String(transfer.amount).replace('.', ','));
+          setFee(String(transfer.fee).replace('.', ','));
+          setNotes(transfer.notes ?? '');
+          return;
+        }
+
+        const transaction = await getTransactionById(editingId);
+        if (!transaction) {
+          Alert.alert('No encontrado', 'El movimiento ya no existe.');
+          router.back();
+          return;
+        }
+
+        if (transaction.transfer_id) {
+          router.replace(`/transactions/new?transferId=${transaction.transfer_id}`);
+          return;
+        }
+
+        setMode(transaction.type === 'ingreso' || transaction.type === 'gasto' || transaction.type === 'ajuste' ? transaction.type : 'ajuste');
+        setDate(formatForInput(transaction.date));
+        setAccountId(transaction.account_id);
+        setAmount(String(Math.abs(transaction.amount)).replace('.', ','));
+        setCategory(transaction.category ?? '');
+        setDescription(transaction.description ?? '');
+        setNotes(transaction.notes ?? '');
+      } catch (error) {
+        Alert.alert('No se pudo cargar', error instanceof Error ? error.message : 'Error desconocido.');
+      } finally {
+        setLoadingRecord(false);
+      }
+    }
+
+    void loadRecord();
+  }, [editingId, editingTransferId, router]);
+
   async function handleSave() {
     setSaving(true);
     try {
@@ -62,7 +124,28 @@ export default function NewTransactionScreen() {
         accountOptions.find((account) => account.value !== selectedAccountId)?.value ||
         '';
 
-      if (mode === 'ingreso') {
+      if (editingTransferId) {
+        await updateTransfer({
+          id: editingTransferId,
+          date: dbDate,
+          fromAccountId: selectedAccountId,
+          toAccountId: selectedToAccountId,
+          amount: parsedAmount,
+          fee: toNumber(fee),
+          notes,
+        });
+      } else if (editingId) {
+        await updateTransaction({
+          id: editingId,
+          date: dbDate,
+          accountId: selectedAccountId,
+          type: mode === 'transferencia' ? 'ajuste' : mode,
+          amount: parsedAmount,
+          category,
+          description: description || (mode === 'ajuste' ? 'Ajuste manual' : description),
+          notes,
+        });
+      } else if (mode === 'ingreso') {
         await createIncome({
           date: dbDate,
           accountId: selectedAccountId,
@@ -86,6 +169,7 @@ export default function NewTransactionScreen() {
           fromAccountId: selectedAccountId,
           toAccountId: selectedToAccountId,
           amount: parsedAmount,
+          fee: toNumber(fee),
           notes,
         });
       } else {
@@ -100,7 +184,7 @@ export default function NewTransactionScreen() {
         });
       }
 
-      router.replace('/transactions');
+      router.replace('/(tabs)/transactions');
     } catch (error) {
       Alert.alert('No se pudo guardar', error instanceof Error ? error.message : 'Error desconocido.');
     } finally {
@@ -108,7 +192,7 @@ export default function NewTransactionScreen() {
     }
   }
 
-  if (loading) {
+  if (loading || loadingRecord) {
     return (
       <Screen>
         <ActivityIndicator color={colors.primary} />
@@ -127,7 +211,7 @@ export default function NewTransactionScreen() {
 
   return (
     <Screen>
-      <SectionTitle>Nuevo movimiento</SectionTitle>
+      <SectionTitle>{editingId || editingTransferId ? 'Editar movimiento' : 'Nuevo movimiento'}</SectionTitle>
       <Text style={{ color: colors.muted }}>Importes con coma o punto. Fecha en formato dd/mm/yyyy.</Text>
       <AppSelect
         label="Tipo"
@@ -162,12 +246,26 @@ export default function NewTransactionScreen() {
         keyboardType="decimal-pad"
         placeholder="0,00"
       />
+      {mode === 'transferencia' ? (
+        <AppInput
+          label="Comision"
+          value={fee}
+          onChangeText={setFee}
+          keyboardType="decimal-pad"
+          placeholder="0,00"
+        />
+      ) : null}
       {mode !== 'transferencia' ? (
         <AppInput label="Categoria" value={category} onChangeText={setCategory} />
       ) : null}
       <AppInput label="Descripcion" value={description} onChangeText={setDescription} />
       <AppInput label="Notas" value={notes} onChangeText={setNotes} multiline />
-      <AppButton title="Guardar movimiento" onPress={handleSave} disabled={saving} />
+      <AppButton title={editingId || editingTransferId ? 'Guardar cambios' : 'Guardar movimiento'} onPress={handleSave} disabled={saving} />
     </Screen>
   );
+}
+
+function formatForInput(dbDate: string): string {
+  const [year, month, day] = dbDate.split('-');
+  return `${day}/${month}/${year}`;
 }

@@ -35,6 +35,11 @@ export interface UpdatePendingBetInput extends Partial<CreateBetInput> {
   id: string;
 }
 
+export interface UpdateBetInput extends Partial<CreateBetInput> {
+  id: string;
+  allowSettledEdit?: boolean;
+}
+
 export interface SettleBetInput {
   id: string;
   status: Exclude<BetStatus, 'pendiente'>;
@@ -264,6 +269,156 @@ export async function updatePendingBet(input: UpdatePendingBetInput): Promise<Be
       },
       false,
     );
+
+    await createAuditLog(db, {
+      action: 'update',
+      tableName: 'bets',
+      recordId: next.id,
+      oldValue: previous,
+      newValue: next,
+    });
+
+    return next;
+  });
+}
+
+export async function updateBet(input: UpdateBetInput): Promise<Bet> {
+  assertRequired(input.id, 'Apuesta');
+
+  return withTransaction(async (db) => {
+    const previous = await db.getFirstAsync<Bet>('SELECT * FROM bets WHERE id = ?', [
+      input.id,
+    ]);
+
+    if (!previous) {
+      throw new Error('Apuesta no encontrada.');
+    }
+
+    if (previous.status !== 'pendiente' && !input.allowSettledEdit) {
+      throw new Error('La apuesta ya esta liquidada. Confirma la edicion para recalcular movimientos.');
+    }
+
+    const nextInput: CreateBetInput = {
+      date: input.date ?? previous.date,
+      event: input.event ?? previous.event,
+      sport: input.sport !== undefined ? input.sport : previous.sport,
+      competition:
+        input.competition !== undefined ? input.competition : previous.competition,
+      market: input.market !== undefined ? input.market : previous.market,
+      selection: input.selection !== undefined ? input.selection : previous.selection,
+      betDescription: input.betDescription ?? previous.bet_description,
+      odds: input.odds ?? previous.odds,
+      stake: input.stake ?? previous.stake,
+      bookmakerAccountId: input.bookmakerAccountId ?? previous.bookmaker_account_id,
+      source: input.source !== undefined ? input.source : previous.source,
+      notes: input.notes !== undefined ? input.notes : previous.notes,
+      importHash: previous.import_hash,
+    };
+
+    validateBetInput(nextInput);
+    await deleteLinkedTransactions(db, previous.id);
+
+    const potential = calculateBetPotential(nextInput.stake, nextInput.odds);
+    let profitLoss = 0;
+    let liquidationAmount = 0;
+    let settledAt: string | null = null;
+
+    if (previous.status !== 'pendiente') {
+      const settlement = calculateBetSettlement({
+        status: previous.status,
+        stake: nextInput.stake,
+        odds: nextInput.odds,
+        cashoutAmount:
+          previous.status === 'cashout'
+            ? input.cashoutAmount ?? previous.profit_loss + nextInput.stake
+            : input.cashoutAmount,
+      });
+      profitLoss = settlement.profitLoss;
+      liquidationAmount = settlement.liquidationAmount;
+      settledAt = previous.settled_at ?? nowIso();
+    }
+
+    const next: Bet = {
+      ...previous,
+      date: nextInput.date ?? previous.date,
+      event: nextInput.event.trim(),
+      sport: nextInput.sport ?? null,
+      competition: nextInput.competition ?? null,
+      market: nextInput.market ?? null,
+      selection: nextInput.selection ?? null,
+      bet_description: nextInput.betDescription.trim(),
+      odds: roundMoney(nextInput.odds),
+      stake: roundMoney(nextInput.stake),
+      bookmaker_account_id: nextInput.bookmakerAccountId,
+      source: nextInput.source ?? null,
+      potential_return: potential.potentialReturn,
+      potential_profit: potential.potentialProfit,
+      profit_loss: profitLoss,
+      settled_at: settledAt,
+      notes: nextInput.notes ?? null,
+      updated_at: nowIso(),
+    };
+
+    await db.runAsync(
+      `UPDATE bets
+       SET date = ?, event = ?, sport = ?, competition = ?, market = ?, selection = ?,
+           bet_description = ?, odds = ?, stake = ?, bookmaker_account_id = ?,
+           source = ?, potential_return = ?, potential_profit = ?, profit_loss = ?,
+           settled_at = ?, notes = ?, updated_at = ?
+       WHERE id = ?`,
+      sqlParams([
+        next.date,
+        next.event,
+        next.sport,
+        next.competition,
+        next.market,
+        next.selection,
+        next.bet_description,
+        next.odds,
+        next.stake,
+        next.bookmaker_account_id,
+        next.source,
+        next.potential_return,
+        next.potential_profit,
+        next.profit_loss,
+        next.settled_at,
+        next.notes,
+        next.updated_at,
+        next.id,
+      ]),
+    );
+
+    await insertTransactionWithBalance(
+      db,
+      {
+        date: next.date,
+        accountId: next.bookmaker_account_id,
+        type: 'stake_apuesta',
+        amount: next.stake,
+        category: 'stake apuesta',
+        description: `Stake apuesta: ${next.event}`,
+        relatedBetId: next.id,
+        notes: next.notes,
+      },
+      false,
+    );
+
+    if (liquidationAmount !== 0) {
+      await insertTransactionWithBalance(
+        db,
+        {
+          date: next.settled_at?.slice(0, 10) ?? todayDbDate(),
+          accountId: next.bookmaker_account_id,
+          type: 'liquidacion_apuesta',
+          amount: liquidationAmount,
+          category: 'liquidacion apuesta',
+          description: `Liquidacion apuesta: ${next.event}`,
+          relatedBetId: next.id,
+          notes: next.notes,
+        },
+        false,
+      );
+    }
 
     await createAuditLog(db, {
       action: 'update',

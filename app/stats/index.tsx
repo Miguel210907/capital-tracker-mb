@@ -37,7 +37,17 @@ export default function StatsScreen() {
         <StatCard label="Dinero bloqueado" value={data.currentBlockedMoney} />
         <StatCard label="Dif. esperado/real MB" value={data.matchedExpectedActualDiff} tone="auto" />
         <StatCard label="ROI total %" value={data.totalRoi} money={false} />
+        <StatCard label="Prevision pendientes" value={data.pendingExpectedProfitTotal} tone="auto" />
+        <StatCard label="Capital previsto" value={data.projectedCapitalWithPending} tone="auto" />
       </View>
+
+      <AppCard>
+        <Text style={styles.title}>Pendientes</Text>
+        <Text style={styles.text}>Beneficio previsto este mes: {data.pendingExpectedProfitMonth}</Text>
+        <Text style={styles.text}>Beneficio previsto total: {data.pendingExpectedProfitTotal}</Text>
+        <Text style={styles.text}>Completados: {data.pendingCompletedCount}</Text>
+        <Text style={styles.text}>Cancelados: {data.pendingCancelledCount}</Text>
+      </AppCard>
 
       <AppCard>
         <Text style={styles.title}>Evolucion mensual</Text>

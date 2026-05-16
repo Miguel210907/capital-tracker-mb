@@ -56,6 +56,41 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
      WHERE status = 'liquidada' AND date BETWEEN ? AND ?`,
     [monthStart, monthEnd],
   );
+  const pendingProfitMonth = await sumSql(
+    `SELECT SUM(expected_profit) AS total
+     FROM pending_items
+     WHERE status IN ('pendiente', 'en_curso', 'vencido')
+       AND expected_date BETWEEN ? AND ?`,
+    [monthStart, monthEnd],
+  );
+  const pendingProfitTotal = await sumSql(
+    `SELECT SUM(expected_profit) AS total
+     FROM pending_items
+     WHERE status IN ('pendiente', 'en_curso', 'vencido')`,
+  );
+  const pendingIncomeTotal = await sumSql(
+    `SELECT SUM(expected_income) AS total
+     FROM pending_items
+     WHERE status IN ('pendiente', 'en_curso', 'vencido')`,
+  );
+  const pendingInvestmentTotal = await sumSql(
+    `SELECT SUM(investment_required) AS total
+     FROM pending_items
+     WHERE status IN ('pendiente', 'en_curso', 'vencido')`,
+  );
+  const overduePending = await countSql(
+    `SELECT COUNT(*) AS total
+     FROM pending_items
+     WHERE status IN ('pendiente', 'en_curso')
+       AND expected_date IS NOT NULL
+       AND expected_date < date('now')`,
+  );
+  const upcomingPending = await countSql(
+    `SELECT COUNT(*) AS total
+     FROM pending_items
+     WHERE status IN ('pendiente', 'en_curso')
+       AND expected_date BETWEEN date('now') AND date('now', '+7 days')`,
+  );
   const pendingBets = await countSql(
     `SELECT COUNT(*) AS total
      FROM bets
@@ -82,6 +117,15 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     gastos_mes: Math.abs(monthExpense),
     apuestas_profit_loss_mes: monthBetProfit,
     matched_profit_loss_mes: monthMatchedProfit,
+    resultado_mensual_total: roundMoney(
+      monthIncome + monthExpense + monthBetProfit + monthMatchedProfit,
+    ),
+    pendientes_profit_mes: pendingProfitMonth,
+    pendientes_profit_total: pendingProfitTotal,
+    pendientes_income_total: pendingIncomeTotal,
+    pendientes_investment_total: pendingInvestmentTotal,
+    pendientes_vencidos: overduePending,
+    pendientes_proximos: upcomingPending,
     apuestas_pendientes: pendingBets,
     roi_apuestas: calculateRoi(betRoiRow?.profit ?? 0, betRoiRow?.stake ?? 0),
     roi_matched_betting: calculateRoi(

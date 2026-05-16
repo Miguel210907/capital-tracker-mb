@@ -296,7 +296,7 @@ export default function ImportExportScreen() {
         <Text style={styles.title}>Excel XLSX</Text>
         <Text style={styles.text}>
           Exporta un libro con hojas para cuentas, movimientos, apuestas, matched betting,
-          transferencias, categorias, resumen mensual y estadisticas.
+          transferencias, pendientes, categorias, resumen mensual y estadisticas.
         </Text>
         <View style={styles.actions}>
           <AppButton title="Exportar XLSX" onPress={handleExportXlsx} disabled={busy} />
@@ -377,7 +377,7 @@ export default function ImportExportScreen() {
         <Text style={styles.title}>Copia de seguridad completa</Text>
         <Text style={styles.text}>
           Exporta o restaura todas las tablas: cuentas, movimientos, transferencias,
-          apuestas, matched betting, categorias, ajustes, backups e historial.
+          apuestas, matched betting, pendientes, categorias, ajustes, backups e historial.
         </Text>
         <View style={styles.actions}>
           <AppButton title="Exportar backup JSON" onPress={handleExportBackup} disabled={busy} />

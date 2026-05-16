@@ -56,6 +56,24 @@ export type MatchedOfferType =
   | 'hedge'
   | 'otro';
 
+export type PendingItemType =
+  | 'venta'
+  | 'matched_betting'
+  | 'ingreso_previsto'
+  | 'gasto_previsto'
+  | 'suscripcion'
+  | 'devolucion'
+  | 'bonus'
+  | 'inversion'
+  | 'otro';
+
+export type PendingItemStatus =
+  | 'pendiente'
+  | 'en_curso'
+  | 'completado'
+  | 'cancelado'
+  | 'vencido';
+
 export type AuditAction =
   | 'create'
   | 'update'
@@ -156,6 +174,27 @@ export interface MatchedBet extends BaseRecord {
   import_hash?: string | null;
 }
 
+export interface PendingItem extends BaseRecord {
+  title: string;
+  type: PendingItemType;
+  status: PendingItemStatus;
+  created_date: string;
+  expected_date?: string | null;
+  account_id?: string | null;
+  related_bet_id?: string | null;
+  related_matched_bet_id?: string | null;
+  related_transaction_id?: string | null;
+  investment_required: number;
+  expected_income: number;
+  expected_expense: number;
+  expected_profit: number;
+  actual_profit: number;
+  priority: number;
+  recurrence?: string | null;
+  notes?: string | null;
+  import_hash?: string | null;
+}
+
 export interface Category extends BaseRecord {
   name: string;
   type: CategoryType;
@@ -188,6 +227,13 @@ export interface DashboardSummary {
   gastos_mes: number;
   apuestas_profit_loss_mes: number;
   matched_profit_loss_mes: number;
+  resultado_mensual_total: number;
+  pendientes_profit_mes: number;
+  pendientes_profit_total: number;
+  pendientes_income_total: number;
+  pendientes_investment_total: number;
+  pendientes_vencidos: number;
+  pendientes_proximos: number;
   apuestas_pendientes: number;
   roi_apuestas: number;
   roi_matched_betting: number;

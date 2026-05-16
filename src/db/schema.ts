@@ -117,6 +117,54 @@ export const SCHEMA_SQL = [
     FOREIGN KEY (exchange_account_id) REFERENCES accounts(id) ON DELETE RESTRICT
   )`,
 
+  `CREATE TABLE IF NOT EXISTS pending_items (
+    id TEXT PRIMARY KEY NOT NULL,
+    title TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (
+      type IN (
+        'venta',
+        'matched_betting',
+        'ingreso_previsto',
+        'gasto_previsto',
+        'suscripcion',
+        'devolucion',
+        'bonus',
+        'inversion',
+        'otro'
+      )
+    ),
+    status TEXT NOT NULL DEFAULT 'pendiente' CHECK (
+      status IN (
+        'pendiente',
+        'en_curso',
+        'completado',
+        'cancelado',
+        'vencido'
+      )
+    ),
+    created_date TEXT NOT NULL,
+    expected_date TEXT,
+    account_id TEXT,
+    related_bet_id TEXT,
+    related_matched_bet_id TEXT,
+    related_transaction_id TEXT,
+    investment_required REAL NOT NULL DEFAULT 0,
+    expected_income REAL NOT NULL DEFAULT 0,
+    expected_expense REAL NOT NULL DEFAULT 0,
+    expected_profit REAL NOT NULL DEFAULT 0,
+    actual_profit REAL NOT NULL DEFAULT 0,
+    priority INTEGER NOT NULL DEFAULT 2,
+    recurrence TEXT,
+    notes TEXT,
+    import_hash TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL,
+    FOREIGN KEY (related_bet_id) REFERENCES bets(id) ON DELETE SET NULL,
+    FOREIGN KEY (related_matched_bet_id) REFERENCES matched_bets(id) ON DELETE SET NULL,
+    FOREIGN KEY (related_transaction_id) REFERENCES transactions(id) ON DELETE SET NULL
+  )`,
+
   `CREATE TABLE IF NOT EXISTS transfers (
     id TEXT PRIMARY KEY NOT NULL,
     date TEXT NOT NULL,
@@ -257,10 +305,15 @@ export const INDEX_SQL = [
   `CREATE INDEX IF NOT EXISTS idx_matched_bets_status ON matched_bets(status)`,
   `CREATE INDEX IF NOT EXISTS idx_matched_bets_bookmaker_account_id ON matched_bets(bookmaker_account_id)`,
   `CREATE INDEX IF NOT EXISTS idx_matched_bets_exchange_account_id ON matched_bets(exchange_account_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_pending_items_status ON pending_items(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_pending_items_expected_date ON pending_items(expected_date)`,
+  `CREATE INDEX IF NOT EXISTS idx_pending_items_type ON pending_items(type)`,
+  `CREATE INDEX IF NOT EXISTS idx_pending_items_related_matched_bet_id ON pending_items(related_matched_bet_id)`,
   `CREATE INDEX IF NOT EXISTS idx_audit_log_date ON audit_log(date)`,
   `CREATE INDEX IF NOT EXISTS idx_audit_log_table_name ON audit_log(table_name)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_import_hash ON accounts(import_hash) WHERE import_hash IS NOT NULL`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_import_hash ON transactions(import_hash) WHERE import_hash IS NOT NULL`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_bets_import_hash ON bets(import_hash) WHERE import_hash IS NOT NULL`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_matched_bets_import_hash ON matched_bets(import_hash) WHERE import_hash IS NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_items_import_hash ON pending_items(import_hash) WHERE import_hash IS NOT NULL`,
 ];

@@ -38,6 +38,23 @@ export default function TransactionsScreen() {
             </View>
             <MoneyText value={transaction.amount} tone="auto" style={styles.amount} />
           </View>
+          <View style={styles.actions}>
+            <AppButton
+              title="Editar"
+              onPress={() =>
+                router.push(
+                  transaction.transfer_id
+                    ? `/transactions/new?transferId=${transaction.transfer_id}`
+                    : transaction.related_bet_id
+                      ? `/bets/new?id=${transaction.related_bet_id}`
+                      : transaction.related_matched_bet_id
+                        ? `/matched-bets/new?id=${transaction.related_matched_bet_id}`
+                    : `/transactions/new?id=${transaction.id}`,
+                )
+              }
+              variant="secondary"
+            />
+          </View>
         </AppCard>
       ))}
     </Screen>
@@ -70,6 +87,10 @@ const styles = StyleSheet.create({
   amount: {
     fontSize: 16,
     fontWeight: '800',
+  },
+  actions: {
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
   error: {
     color: colors.danger,

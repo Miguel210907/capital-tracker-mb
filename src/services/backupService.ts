@@ -8,6 +8,7 @@ import type {
   Bet,
   Category,
   MatchedBet,
+  PendingItem,
   Setting,
   Transaction,
   Transfer,
@@ -16,7 +17,7 @@ import { nowIso } from '../utils/dates';
 import { createId } from '../utils/ids';
 import { saveTextFile, shareFile, timestampForFileName, type SavedFile } from './fileService';
 
-type BackupFormatVersion = 1;
+type BackupFormatVersion = 1 | 2;
 
 export interface BackupData {
   format: 'capital-tracker-mb-backup';
@@ -26,6 +27,7 @@ export interface BackupData {
     accounts: Account[];
     bets: Bet[];
     matched_bets: MatchedBet[];
+    pending_items: PendingItem[];
     transfers: Transfer[];
     transactions: Transaction[];
     categories: Category[];
@@ -44,6 +46,7 @@ const TABLE_READ_ORDER = [
   'accounts',
   'bets',
   'matched_bets',
+  'pending_items',
   'transfers',
   'transactions',
   'categories',
@@ -55,6 +58,7 @@ const TABLE_READ_ORDER = [
 
 const DELETE_ORDER = [
   'transactions',
+  'pending_items',
   'transfers',
   'bets',
   'matched_bets',
@@ -72,6 +76,7 @@ const INSERT_ORDER = [
   'matched_bets',
   'transfers',
   'transactions',
+  'pending_items',
   'categories',
   'settings',
   'audit_log',
@@ -84,6 +89,7 @@ export async function buildBackupData(): Promise<BackupData> {
     accounts: await getAll<Account>('SELECT * FROM accounts ORDER BY created_at ASC'),
     bets: await getAll<Bet>('SELECT * FROM bets ORDER BY created_at ASC'),
     matched_bets: await getAll<MatchedBet>('SELECT * FROM matched_bets ORDER BY created_at ASC'),
+    pending_items: await getAll<PendingItem>('SELECT * FROM pending_items ORDER BY created_at ASC'),
     transfers: await getAll<Transfer>('SELECT * FROM transfers ORDER BY created_at ASC'),
     transactions: await getAll<Transaction>('SELECT * FROM transactions ORDER BY created_at ASC'),
     categories: await getAll<Category>('SELECT * FROM categories ORDER BY created_at ASC'),
@@ -97,7 +103,7 @@ export async function buildBackupData(): Promise<BackupData> {
 
   return {
     format: 'capital-tracker-mb-backup',
-    version: 1,
+    version: 2,
     created_at: nowIso(),
     tables,
   };
@@ -138,14 +144,25 @@ export async function exportJsonBackup(options: { share?: boolean } = {}): Promi
 export function parseBackupJson(content: string): BackupData {
   const parsed = JSON.parse(content) as BackupData;
 
-  if (parsed.format !== 'capital-tracker-mb-backup' || parsed.version !== 1) {
+  if (
+    parsed.format !== 'capital-tracker-mb-backup' ||
+    (parsed.version !== 1 && parsed.version !== 2)
+  ) {
     throw new Error('El archivo no es una copia de seguridad compatible.');
   }
 
-  for (const tableName of TABLE_READ_ORDER) {
+  const requiredTables = TABLE_READ_ORDER.filter((tableName) => {
+    return parsed.version === 2 || tableName !== 'pending_items';
+  });
+
+  for (const tableName of requiredTables) {
     if (!Array.isArray(parsed.tables?.[tableName])) {
       throw new Error(`La copia no contiene la tabla ${tableName}.`);
     }
+  }
+
+  if (!Array.isArray(parsed.tables.pending_items)) {
+    parsed.tables.pending_items = [];
   }
 
   return parsed;

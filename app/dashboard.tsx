@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { AppButton } from '../src/components/AppButton';
 import { AppCard } from '../src/components/AppCard';
+import { AppLogo } from '../src/components/AppLogo';
 import { Screen } from '../src/components/Screen';
 import { SectionTitle } from '../src/components/SectionTitle';
 import { StatCard } from '../src/components/StatCard';
@@ -26,11 +27,14 @@ export default function DashboardScreen() {
   return (
     <Screen refreshing={refreshing} onRefresh={refresh}>
       <SectionTitle>Dashboard</SectionTitle>
+      <AppLogo />
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <View style={styles.grid}>
         <StatCard label="Capital total" value={data.capital_total} />
         <StatCard label="Capital disponible" value={data.capital_disponible} />
+        <StatCard label="Saldo real estimado" value={data.saldo_real_estimado} />
+        <StatCard label="Resultado total mes" value={data.resultado_mensual_total} tone="auto" />
         <StatCard label="Bloqueado apuestas" value={data.dinero_bloqueado_apuestas} />
         <StatCard
           label="Bloqueado matched"
@@ -40,7 +44,18 @@ export default function DashboardScreen() {
         <StatCard label="Gastos mes" value={data.gastos_mes} />
         <StatCard label="P/L apuestas mes" value={data.apuestas_profit_loss_mes} tone="auto" />
         <StatCard label="P/L matched mes" value={data.matched_profit_loss_mes} tone="auto" />
+        <StatCard label="Pendientes mes" value={data.pendientes_profit_mes} tone="auto" />
+        <StatCard label="Pendientes total" value={data.pendientes_profit_total} tone="auto" />
       </View>
+
+      <AppCard>
+        <Text style={styles.cardTitle}>Prevision y alertas</Text>
+        <Text style={styles.line}>Por cobrar en pendientes: {data.pendientes_income_total.toFixed(2).replace('.', ',')} EUR</Text>
+        <Text style={styles.line}>Por invertir en pendientes: {data.pendientes_investment_total.toFixed(2).replace('.', ',')} EUR</Text>
+        <Text style={styles.line}>Pendientes vencidos: {data.pendientes_vencidos}</Text>
+        <Text style={styles.line}>Proximos 7 dias: {data.pendientes_proximos}</Text>
+        <AppButton title="Ver pendientes" onPress={() => router.push('/(tabs)/pending')} variant="secondary" />
+      </AppCard>
 
       <AppCard>
         <Text style={styles.cardTitle}>Control de apuestas</Text>
@@ -58,14 +73,16 @@ export default function DashboardScreen() {
         <AppButton title="Transferencia" onPress={() => router.push('/transactions/new?type=transferencia')} variant="secondary" />
         <AppButton title="Anadir apuesta" onPress={() => router.push('/bets/new')} variant="secondary" />
         <AppButton title="Matched bet" onPress={() => router.push('/matched-bets/new')} variant="secondary" />
+        <AppButton title="Pendiente" onPress={() => router.push('/pending/new')} variant="secondary" />
       </View>
 
       <AppCard>
         <Text style={styles.cardTitle}>Secciones</Text>
         <View style={styles.quickActions}>
           <AppButton title="Cuentas" onPress={() => router.push('/accounts')} variant="secondary" />
-          <AppButton title="Movimientos" onPress={() => router.push('/transactions')} variant="secondary" />
-          <AppButton title="Apuestas" onPress={() => router.push('/bets')} variant="secondary" />
+          <AppButton title="Movimientos" onPress={() => router.push('/(tabs)/transactions')} variant="secondary" />
+          <AppButton title="Apuestas" onPress={() => router.push('/(tabs)/bets')} variant="secondary" />
+          <AppButton title="Pendientes" onPress={() => router.push('/(tabs)/pending')} variant="secondary" />
           <AppButton title="Matched betting" onPress={() => router.push('/matched-bets')} variant="secondary" />
           <AppButton title="Estadisticas" onPress={() => router.push('/stats')} variant="secondary" />
           <AppButton title="Ajustes" onPress={() => router.push('/settings')} variant="secondary" />

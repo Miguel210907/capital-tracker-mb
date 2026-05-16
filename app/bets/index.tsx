@@ -57,11 +57,16 @@ export default function BetsScreen() {
 
           {bet.status === 'pendiente' ? (
             <View style={styles.actions}>
+              <AppButton title="Editar" onPress={() => router.push(`/bets/new?id=${bet.id}`)} variant="secondary" />
               <AppButton title="Ganada" onPress={() => handleSettle(bet.id, 'ganada')} variant="secondary" />
               <AppButton title="Perdida" onPress={() => handleSettle(bet.id, 'perdida')} variant="secondary" />
               <AppButton title="Nula" onPress={() => handleSettle(bet.id, 'nula')} variant="secondary" />
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.actions}>
+              <AppButton title="Editar" onPress={() => router.push(`/bets/new?id=${bet.id}`)} variant="secondary" />
+            </View>
+          )}
         </AppCard>
       ))}
     </Screen>

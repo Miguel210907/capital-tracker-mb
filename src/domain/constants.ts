@@ -1,4 +1,11 @@
-import type { AccountType, BetStatus, MatchedOfferType, TransactionType } from './types';
+import type {
+  AccountType,
+  BetStatus,
+  MatchedOfferType,
+  PendingItemStatus,
+  PendingItemType,
+  TransactionType,
+} from './types';
 
 export const DEFAULT_CURRENCY = 'EUR';
 
@@ -50,6 +57,26 @@ export const MATCHED_OFFER_TYPES: MatchedOfferType[] = [
   'dutching',
   'hedge',
   'otro',
+];
+
+export const PENDING_ITEM_TYPES: PendingItemType[] = [
+  'venta',
+  'matched_betting',
+  'ingreso_previsto',
+  'gasto_previsto',
+  'suscripcion',
+  'devolucion',
+  'bonus',
+  'inversion',
+  'otro',
+];
+
+export const PENDING_ITEM_STATUSES: PendingItemStatus[] = [
+  'pendiente',
+  'en_curso',
+  'completado',
+  'cancelado',
+  'vencido',
 ];
 
 export const RESPONSIBLE_GAMBLING_SETTING_KEYS = {

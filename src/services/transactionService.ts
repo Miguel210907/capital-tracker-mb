@@ -47,6 +47,10 @@ export interface CreateTransferInput {
   notes?: string | null;
 }
 
+export interface UpdateTransferInput extends Partial<CreateTransferInput> {
+  id: string;
+}
+
 export async function listTransactions(filter: ListFilter = {}): Promise<Transaction[]> {
   const where: string[] = [];
   const params: unknown[] = [];
@@ -205,6 +209,121 @@ export async function createTransfer(input: CreateTransferInput): Promise<Transf
   });
 }
 
+export async function getTransferById(id: string): Promise<Transfer | null> {
+  return getFirst<Transfer>('SELECT * FROM transfers WHERE id = ?', [id]);
+}
+
+export async function updateTransfer(input: UpdateTransferInput): Promise<Transfer> {
+  assertRequired(input.id, 'Transferencia');
+
+  return withTransaction(async (db) => {
+    const previous = await db.getFirstAsync<Transfer>(
+      'SELECT * FROM transfers WHERE id = ?',
+      [input.id],
+    );
+
+    if (!previous) {
+      throw new Error('Transferencia no encontrada.');
+    }
+
+    const nextFromAccountId = input.fromAccountId ?? previous.from_account_id;
+    const nextToAccountId = input.toAccountId ?? previous.to_account_id;
+    assertDifferentAccounts(nextFromAccountId, nextToAccountId);
+
+    const amount = roundMoney(input.amount ?? previous.amount);
+    assertPositiveAmount(amount, 'Importe');
+
+    const fee = roundMoney(input.fee ?? previous.fee);
+    if (fee < 0) {
+      throw new Error('La comision no puede ser negativa.');
+    }
+
+    await deleteTransferTransactions(db, previous.id);
+
+    const next: Transfer = {
+      ...previous,
+      date: input.date ?? previous.date,
+      from_account_id: nextFromAccountId,
+      to_account_id: nextToAccountId,
+      amount,
+      fee,
+      notes: input.notes !== undefined ? input.notes : previous.notes,
+    };
+
+    await db.runAsync(
+      `UPDATE transfers
+       SET date = ?, from_account_id = ?, to_account_id = ?, amount = ?, fee = ?, notes = ?
+       WHERE id = ?`,
+      sqlParams([
+        next.date,
+        next.from_account_id,
+        next.to_account_id,
+        next.amount,
+        next.fee,
+        next.notes,
+        next.id,
+      ]),
+    );
+
+    await insertTransactionWithBalance(
+      db,
+      {
+        date: next.date,
+        accountId: next.from_account_id,
+        type: 'transferencia_salida',
+        amount: next.amount,
+        category: 'transferencia',
+        description: 'Transferencia enviada',
+        transferId: next.id,
+        notes: next.notes,
+      },
+      false,
+    );
+
+    await insertTransactionWithBalance(
+      db,
+      {
+        date: next.date,
+        accountId: next.to_account_id,
+        type: 'transferencia_entrada',
+        amount: next.amount,
+        category: 'transferencia',
+        description: 'Transferencia recibida',
+        transferId: next.id,
+        notes: next.notes,
+      },
+      false,
+    );
+
+    if (next.fee > 0) {
+      await insertTransactionWithBalance(
+        db,
+        {
+          date: next.date,
+          accountId: next.from_account_id,
+          type: 'comision',
+          amount: next.fee,
+          category: 'comisiones',
+          description: 'Comision de transferencia',
+          transferId: next.id,
+          notes: next.notes,
+        },
+        false,
+      );
+    }
+
+    await createAuditLog(db, {
+      action: 'update',
+      tableName: 'transfers',
+      recordId: next.id,
+      oldValue: previous,
+      newValue: next,
+    });
+
+    return next;
+  });
+}
+
 export async function updateTransaction(input: UpdateTransactionInput): Promise<Transaction> {
   assertRequired(input.id, 'Movimiento');
 
@@ -218,8 +337,8 @@ export async function updateTransaction(input: UpdateTransactionInput): Promise<
       throw new Error('Movimiento no encontrado.');
     }
 
-    if (previous.related_bet_id || previous.related_matched_bet_id) {
-      throw new Error('Este movimiento esta vinculado a una apuesta. Edita la apuesta asociada.');
+    if (previous.related_bet_id || previous.related_matched_bet_id || previous.transfer_id) {
+      throw new Error('Este movimiento esta vinculado. Edita la apuesta, matched bet o transferencia asociada.');
     }
 
     await applyAccountDelta(db, previous.account_id, -previous.amount);
@@ -272,6 +391,18 @@ export async function updateTransaction(input: UpdateTransactionInput): Promise<
   });
 }
 
+async function deleteTransferTransactions(db: SQLiteDatabase, transferId: string): Promise<void> {
+  const linkedTransactions = await db.getAllAsync<Transaction>(
+    'SELECT * FROM transactions WHERE transfer_id = ?',
+    [transferId],
+  );
+
+  for (const transaction of linkedTransactions) {
+    await applyAccountDelta(db, transaction.account_id, -transaction.amount);
+    await db.runAsync('DELETE FROM transactions WHERE id = ?', [transaction.id]);
+  }
+}
+
 export async function deleteTransaction(id: string): Promise<void> {
   assertRequired(id, 'Movimiento');
 
@@ -285,8 +416,8 @@ export async function deleteTransaction(id: string): Promise<void> {
       return;
     }
 
-    if (previous.related_bet_id || previous.related_matched_bet_id) {
-      throw new Error('Este movimiento esta vinculado a una apuesta. Borra o corrige la apuesta asociada.');
+    if (previous.related_bet_id || previous.related_matched_bet_id || previous.transfer_id) {
+      throw new Error('Este movimiento esta vinculado. Borra o corrige la apuesta, matched bet o transferencia asociada.');
     }
 
     await applyAccountDelta(db, previous.account_id, -previous.amount);

@@ -57,6 +57,11 @@ export default function AccountDetailScreen() {
         title="Nuevo movimiento"
         onPress={() => router.push(`/transactions/new?accountId=${accountId}`)}
       />
+      <AppButton
+        title="Editar cuenta"
+        onPress={() => router.push(`/accounts/new?id=${accountId}`)}
+        variant="secondary"
+      />
 
       <SectionTitle>Historial</SectionTitle>
       {data.transactions.length === 0 ? (

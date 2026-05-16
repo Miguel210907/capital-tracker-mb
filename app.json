@@ -5,10 +5,17 @@
     "scheme": "capitaltrackermb",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "platforms": ["ios"],
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f6f7f9"
+    },
     "ios": {
       "supportsTablet": false,
+      "icon": "./assets/icon.png",
       "bundleIdentifier": "com.local.capitaltrackermb",
       "infoPlist": {
         "NSFaceIDUsageDescription": "Capital Tracker MB usa Face ID si activas la proteccion local de la app."

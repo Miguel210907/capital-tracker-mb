@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Text } from 'react-native';
 
 import { AppButton } from '../../src/components/AppButton';
@@ -10,14 +10,18 @@ import { Screen } from '../../src/components/Screen';
 import { SectionTitle } from '../../src/components/SectionTitle';
 import { useAccounts } from '../../src/hooks/useAccounts';
 import { checkStakeLimits } from '../../src/services/responsibleGamblingService';
-import { createBet } from '../../src/services/bettingService';
+import { createBet, getBetById, updateBet } from '../../src/services/bettingService';
 import { colors } from '../../src/theme/colors';
 import { parseSpanishDateInput, todaySpanishDate } from '../../src/utils/dates';
 import { toNumber } from '../../src/utils/money';
 
 export default function NewBetScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ id?: string }>();
+  const editingId = typeof params.id === 'string' ? params.id : '';
   const { data: accounts, loading } = useAccounts();
+  const [loadingRecord, setLoadingRecord] = useState(Boolean(editingId));
+  const [editingStatus, setEditingStatus] = useState('pendiente');
   const [date, setDate] = useState(todaySpanishDate());
   const [event, setEvent] = useState('');
   const [sport, setSport] = useState('');
@@ -39,7 +43,42 @@ export default function NewBetScreen() {
     return usableAccounts.map((account) => ({ label: account.name, value: account.id }));
   }, [accounts]);
 
-  async function handleSave(skipLimitWarning = false) {
+  useEffect(() => {
+    if (!editingId) {
+      return;
+    }
+
+    getBetById(editingId)
+      .then((bet) => {
+        if (!bet) {
+          Alert.alert('No encontrada', 'La apuesta ya no existe.');
+          router.back();
+          return;
+        }
+
+        setDate(formatForInput(bet.date));
+        setEvent(bet.event);
+        setSport(bet.sport ?? '');
+        setCompetition(bet.competition ?? '');
+        setMarket(bet.market ?? '');
+        setBetDescription(bet.bet_description);
+        setOdds(String(bet.odds).replace('.', ','));
+        setStake(String(bet.stake).replace('.', ','));
+        setSource(bet.source ?? '');
+        setBookmakerAccountId(bet.bookmaker_account_id);
+        setNotes(bet.notes ?? '');
+        setEditingStatus(bet.status);
+      })
+      .catch((unknownError) => {
+        Alert.alert(
+          'No se pudo cargar',
+          unknownError instanceof Error ? unknownError.message : 'Error desconocido.',
+        );
+      })
+      .finally(() => setLoadingRecord(false));
+  }, [editingId, router]);
+
+  async function handleSave(skipLimitWarning = false, allowSettledEdit = false) {
     setSaving(true);
     try {
       const dbDate = parseSpanishDateInput(date);
@@ -67,20 +106,51 @@ export default function NewBetScreen() {
         }
       }
 
-      await createBet({
-        date: dbDate,
-        event,
-        sport,
-        competition,
-        market,
-        betDescription,
-        odds: toNumber(odds),
-        stake: parsedStake,
-        source,
-        bookmakerAccountId: selectedBookmakerAccountId,
-        notes,
-      });
-      router.replace('/bets');
+      if (editingId) {
+        if (editingStatus !== 'pendiente' && !allowSettledEdit) {
+          setSaving(false);
+          Alert.alert(
+            'Recalcular apuesta liquidada',
+            'La apuesta ya esta liquidada. Si continuas se recalcularan los movimientos asociados con los nuevos datos.',
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              { text: 'Recalcular', onPress: () => void handleSave(true, true) },
+            ],
+          );
+          return;
+        }
+
+        await updateBet({
+          id: editingId,
+          date: dbDate,
+          event,
+          sport,
+          competition,
+          market,
+          betDescription,
+          odds: toNumber(odds),
+          stake: parsedStake,
+          source,
+          bookmakerAccountId: selectedBookmakerAccountId,
+          notes,
+          allowSettledEdit,
+        });
+      } else {
+        await createBet({
+          date: dbDate,
+          event,
+          sport,
+          competition,
+          market,
+          betDescription,
+          odds: toNumber(odds),
+          stake: parsedStake,
+          source,
+          bookmakerAccountId: selectedBookmakerAccountId,
+          notes,
+        });
+      }
+      router.replace('/(tabs)/bets');
     } catch (unknownError) {
       Alert.alert('No se pudo guardar', unknownError instanceof Error ? unknownError.message : 'Error desconocido.');
     } finally {
@@ -88,7 +158,7 @@ export default function NewBetScreen() {
     }
   }
 
-  if (loading) {
+  if (loading || loadingRecord) {
     return (
       <Screen>
         <ActivityIndicator color={colors.primary} />
@@ -107,7 +177,7 @@ export default function NewBetScreen() {
 
   return (
     <Screen>
-      <SectionTitle>Nueva apuesta</SectionTitle>
+      <SectionTitle>{editingId ? 'Editar apuesta' : 'Nueva apuesta'}</SectionTitle>
       <Text style={{ color: colors.muted }}>Al guardar, el stake queda bloqueado como movimiento negativo.</Text>
       <AppInput label="Fecha" value={date} onChangeText={setDate} placeholder="16/05/2026" />
       <AppInput label="Partido/evento" value={event} onChangeText={setEvent} />
@@ -125,7 +195,12 @@ export default function NewBetScreen() {
         onChange={setBookmakerAccountId}
       />
       <AppInput label="Nota" value={notes} onChangeText={setNotes} multiline />
-      <AppButton title="Guardar apuesta pendiente" onPress={() => void handleSave()} disabled={saving} />
+      <AppButton title={editingId ? 'Guardar cambios' : 'Guardar apuesta pendiente'} onPress={() => void handleSave()} disabled={saving} />
     </Screen>
   );
+}
+
+function formatForInput(dbDate: string): string {
+  const [year, month, day] = dbDate.split('-');
+  return `${day}/${month}/${year}`;
 }
