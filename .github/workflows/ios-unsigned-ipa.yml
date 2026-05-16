@@ -68,13 +68,17 @@ jobs:
           echo "Using scheme: $SCHEME"
 
       - name: Build unsigned .app for iPhone
+        id: build_app
         run: |
           set -euo pipefail
           WORKSPACE="${{ steps.xcode.outputs.workspace }}"
           SCHEME="${{ steps.xcode.outputs.scheme }}"
           DERIVED_DATA="$PWD/build/DerivedData"
           BUILD_DIR="$PWD/build/xcode"
+          LOG_DIR="$PWD/build/logs"
+          mkdir -p "$LOG_DIR"
 
+          set +e
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -83,12 +87,32 @@ jobs:
             -derivedDataPath "$DERIVED_DATA" \
             -destination generic/platform=iOS \
             clean build \
+            CODE_SIGN_STYLE=Manual \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
             SKIP_INSTALL=NO \
-            BUILD_DIR="$BUILD_DIR"
+            BUILD_DIR="$BUILD_DIR" \
+            2>&1 | tee "$LOG_DIR/xcodebuild.log"
+
+          STATUS=${PIPESTATUS[0]}
+          if [ "$STATUS" -ne 0 ]; then
+            echo "::error::xcodebuild failed with status $STATUS. Showing last 200 log lines."
+            tail -n 200 "$LOG_DIR/xcodebuild.log"
+            exit "$STATUS"
+          fi
+
+      - name: Upload Xcode build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build/logs/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Package unsigned IPA
         run: |
