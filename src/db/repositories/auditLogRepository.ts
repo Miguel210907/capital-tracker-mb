@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { sqlParams } from '../database';
 import type { AuditAction, AuditLog } from '../../domain/types';
 import { nowIso } from '../../utils/dates';
 import { createId } from '../../utils/ids';
@@ -40,7 +41,7 @@ export async function createAuditLog(
     `INSERT INTO audit_log
       (id, date, action, table_name, record_id, old_value, new_value, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+    sqlParams([
       auditLog.id,
       auditLog.date,
       auditLog.action,
@@ -49,7 +50,7 @@ export async function createAuditLog(
       auditLog.old_value,
       auditLog.new_value,
       auditLog.created_at,
-    ],
+    ]),
   );
 
   return auditLog;

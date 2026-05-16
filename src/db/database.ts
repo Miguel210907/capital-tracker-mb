@@ -30,19 +30,23 @@ export async function initializeDatabase(): Promise<void> {
   await seedDefaultData(db);
 }
 
+export function sqlParams(params: readonly unknown[] = []) {
+  return params.map((value) => (value === undefined ? null : value)) as any;
+}
+
 export async function runSql(sql: string, params: unknown[] = []) {
   const db = await getDatabase();
-  return db.runAsync(sql, params as any);
+  return db.runAsync(sql, sqlParams(params));
 }
 
 export async function getFirst<T>(sql: string, params: unknown[] = []): Promise<T | null> {
   const db = await getDatabase();
-  return db.getFirstAsync<T>(sql, params as any);
+  return db.getFirstAsync<T>(sql, sqlParams(params));
 }
 
 export async function getAll<T>(sql: string, params: unknown[] = []): Promise<T[]> {
   const db = await getDatabase();
-  return db.getAllAsync<T>(sql, params as any);
+  return db.getAllAsync<T>(sql, sqlParams(params));
 }
 
 export async function withTransaction<T>(

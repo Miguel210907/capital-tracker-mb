@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { createAuditLog } from '../db/repositories/auditLogRepository';
-import { getAll, getFirst, withTransaction } from '../db/database';
+import { getAll, getFirst, sqlParams, withTransaction } from '../db/database';
 import type {
   ListFilter,
   MatchedBet,
@@ -255,7 +255,7 @@ export async function updatePendingMatchedBet(
            freebet_amount = ?, expected_profit = ?, expected_actual_diff = ?, roi = ?,
            notes = ?, updated_at = ?
        WHERE id = ?`,
-      [
+      sqlParams([
         next.date,
         next.event,
         next.sport,
@@ -277,7 +277,7 @@ export async function updatePendingMatchedBet(
         next.notes,
         next.updated_at,
         next.id,
-      ],
+      ]),
     );
 
     await insertMatchedBetOpeningTransactions(db, next);
@@ -340,7 +340,7 @@ export async function settleMatchedBet(input: SettleMatchedBetInput): Promise<Ma
        SET status = ?, result = ?, actual_profit = ?, expected_actual_diff = ?,
            roi = ?, settled_at = ?, notes = ?, updated_at = ?
        WHERE id = ?`,
-      [
+      sqlParams([
         next.status,
         next.result,
         next.actual_profit,
@@ -350,7 +350,7 @@ export async function settleMatchedBet(input: SettleMatchedBetInput): Promise<Ma
         next.notes,
         next.updated_at,
         next.id,
-      ],
+      ]),
     );
 
     if (settlement.bookmakerLiquidationAmount !== 0) {
@@ -441,7 +441,7 @@ async function insertMatchedBet(db: SQLiteDatabase, matchedBet: MatchedBet): Pro
        actual_profit, expected_actual_diff, roi, status, result, settled_at,
        notes, import_hash, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+    sqlParams([
       matchedBet.id,
       matchedBet.date,
       matchedBet.event,
@@ -469,7 +469,7 @@ async function insertMatchedBet(db: SQLiteDatabase, matchedBet: MatchedBet): Pro
       matchedBet.import_hash,
       matchedBet.created_at,
       matchedBet.updated_at,
-    ],
+    ]),
   );
 }
 

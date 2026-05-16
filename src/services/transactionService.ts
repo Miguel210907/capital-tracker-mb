@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { createAuditLog } from '../db/repositories/auditLogRepository';
-import { getAll, getFirst, withTransaction } from '../db/database';
+import { getAll, getFirst, sqlParams, withTransaction } from '../db/database';
 import type { ListFilter, Transaction, TransactionType, Transfer } from '../domain/types';
 import {
   assertDifferentAccounts,
@@ -134,7 +134,7 @@ export async function createTransfer(input: CreateTransferInput): Promise<Transf
       `INSERT INTO transfers
         (id, date, from_account_id, to_account_id, amount, fee, notes, import_hash, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+      sqlParams([
         transfer.id,
         transfer.date,
         transfer.from_account_id,
@@ -144,7 +144,7 @@ export async function createTransfer(input: CreateTransferInput): Promise<Transf
         transfer.notes,
         transfer.import_hash,
         transfer.created_at,
-      ],
+      ]),
     );
 
     await insertTransactionWithBalance(
@@ -246,7 +246,7 @@ export async function updateTransaction(input: UpdateTransactionInput): Promise<
        SET date = ?, account_id = ?, type = ?, category = ?, amount = ?,
            description = ?, notes = ?, updated_at = ?
        WHERE id = ?`,
-      [
+      sqlParams([
         next.date,
         next.account_id,
         next.type,
@@ -256,7 +256,7 @@ export async function updateTransaction(input: UpdateTransactionInput): Promise<
         next.notes,
         next.updated_at,
         next.id,
-      ],
+      ]),
     );
 
     await applyAccountDelta(db, next.account_id, next.amount);
@@ -371,7 +371,7 @@ export async function insertTransactionWithBalance(
        related_bet_id, related_matched_bet_id, transfer_id, notes, import_hash,
        created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+    sqlParams([
       transaction.id,
       transaction.date,
       transaction.account_id,
@@ -386,7 +386,7 @@ export async function insertTransactionWithBalance(
       transaction.import_hash,
       transaction.created_at,
       transaction.updated_at,
-    ],
+    ]),
   );
 
   await applyAccountDelta(db, transaction.account_id, transaction.amount);

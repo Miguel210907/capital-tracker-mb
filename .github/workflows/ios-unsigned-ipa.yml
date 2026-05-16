@@ -7,20 +7,47 @@ on:
       - main
       - master
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build-ios-unsigned-ipa:
     name: Build unsigned IPA for AltStore
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
+          cache: npm
+
+      - name: Select stable Xcode 26
+        run: |
+          set -euo pipefail
+          echo "Available Xcode apps:"
+          ls -1 /Applications | grep -E '^Xcode' || true
+
+          for app in \
+            /Applications/Xcode_26.4.app \
+            /Applications/Xcode_26.3.app \
+            /Applications/Xcode_26.2.app \
+            /Applications/Xcode.app
+          do
+            if [ -d "$app" ]; then
+              sudo xcode-select -s "$app/Contents/Developer"
+              break
+            fi
+          done
+
+          xcode-select -p
+          xcodebuild -version
 
       - name: Show tool versions
         run: |
@@ -30,7 +57,7 @@ jobs:
           pod --version
 
       - name: Install JavaScript dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
       - name: Generate native iOS project
         env:
@@ -101,13 +128,16 @@ jobs:
           STATUS=${PIPESTATUS[0]}
           if [ "$STATUS" -ne 0 ]; then
             echo "::error::xcodebuild failed with status $STATUS. Showing last 200 log lines."
+            echo "---- xcodebuild extracted errors ----"
+            grep -n -Ei "error:|fatal error:|warning:.*will be treated as an error|CodeSign|Signing for|Provisioning profile|No profiles|requires a development team|Command .* failed|BUILD FAILED|Ld |SwiftCompile|CompileC" "$LOG_DIR/xcodebuild.log" | tail -n 120 || true
+            echo "---- xcodebuild log tail ----"
             tail -n 200 "$LOG_DIR/xcodebuild.log"
             exit "$STATUS"
           fi
 
       - name: Upload Xcode build log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xcodebuild-log
           path: build/logs/xcodebuild.log
@@ -132,7 +162,7 @@ jobs:
           ls -lh ipa
 
       - name: Upload IPA artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CapitalTrackerMB-unsigned-ipa
           path: |

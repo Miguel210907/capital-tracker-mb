@@ -7,7 +7,7 @@ Esta app es una app nativa iOS con React Native + Expo. No es web ni PWA.
 iOS no instala apps realmente sin firmar. El flujo viable sin Apple Developer de pago
 y sin Mac local es:
 
-1. GitHub Actions usa un runner macOS con Xcode.
+1. GitHub Actions usa un runner macOS 26 con Xcode 26.
 2. El runner genera el proyecto iOS con `expo prebuild`.
 3. Xcode compila la app para `iphoneos` sin firma de distribucion.
 4. El workflow empaqueta `Payload/CapitalTrackerMB.app` como `.ipa`.
@@ -130,8 +130,8 @@ CapitalTrackerMB-unsigned.ipa.sha256
 Resumen del workflow:
 
 ```yaml
-runs-on: macos-15
-npm install --legacy-peer-deps
+runs-on: macos-26
+npm ci --legacy-peer-deps
 npx expo prebuild --platform ios --clean --non-interactive --no-install
 cd ios && pod install --repo-update
 xcodebuild ... -sdk iphoneos ... CODE_SIGNING_ALLOWED=NO
@@ -142,7 +142,7 @@ zip CapitalTrackerMB-unsigned.ipa Payload
 
 Detalles importantes:
 
-- Usa runner macOS porque iOS requiere Xcode.
+- Usa runner macOS 26 porque Expo SDK actual necesita Xcode/Swift moderno.
 - No usa certificados Apple.
 - No usa Apple Developer de pago.
 - No sube tus datos a ningun backend.
@@ -268,6 +268,18 @@ Reintenta el workflow. Si persiste, revisa el log de CocoaPods. Suele estar rela
 versiones de paquetes nativos.
 
 ### GitHub Actions falla en `xcodebuild`
+
+Si ves errores Swift dentro de `expo-modules-core` parecidos a:
+
+```text
+ExpoReactDelegate.swift: error: call to main actor-isolated initializer
+PersistentFileLog.swift: error: capture of non-sendable type
+SwiftUIHostingView.swift: error: unknown attribute 'MainActor'
+```
+
+no es un problema de AltStore ni del `.ipa`. Es una incompatibilidad entre el SDK
+de Expo/React Native instalado y la version de Xcode del runner. Usa `macos-26`
+y Node 24 en el workflow.
 
 Este workflow desactiva firma con:
 

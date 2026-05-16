@@ -1,5 +1,5 @@
 import { createAuditLog } from '../db/repositories/auditLogRepository';
-import { getAll, getFirst, withTransaction } from '../db/database';
+import { getAll, getFirst, sqlParams, withTransaction } from '../db/database';
 import type { Account, AccountType, ListFilter, Transaction } from '../domain/types';
 import { DEFAULT_CURRENCY } from '../domain/constants';
 import { assertPositiveAmount, assertRequired } from '../domain/validators';
@@ -84,7 +84,7 @@ export async function createAccount(input: CreateAccountInput): Promise<Account>
       `INSERT INTO accounts
         (id, name, type, initial_balance, current_balance, currency, notes, import_hash, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+      sqlParams([
         account.id,
         account.name,
         account.type,
@@ -95,7 +95,7 @@ export async function createAccount(input: CreateAccountInput): Promise<Account>
         account.import_hash,
         account.created_at,
         account.updated_at,
-      ],
+      ]),
     );
 
     await createAuditLog(db, {
@@ -134,7 +134,7 @@ export async function updateAccount(input: UpdateAccountInput): Promise<Account>
       `UPDATE accounts
        SET name = ?, type = ?, currency = ?, notes = ?, updated_at = ?
        WHERE id = ?`,
-      [next.name, next.type, next.currency, next.notes, next.updated_at, next.id],
+      sqlParams([next.name, next.type, next.currency, next.notes, next.updated_at, next.id]),
     );
 
     await createAuditLog(db, {

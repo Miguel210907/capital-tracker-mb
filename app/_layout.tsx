@@ -1,7 +1,6 @@
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, StatusBar, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { initializeDatabase } from '../src/db/database';
@@ -50,7 +49,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <SecurityGate>
-        <StatusBar style="auto" />
+        <StatusBar barStyle="default" />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: colors.surface },

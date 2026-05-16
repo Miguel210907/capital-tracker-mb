@@ -21,7 +21,7 @@ export function SimpleBarChart({ data, maxItems = 8 }: SimpleBarChartProps) {
   return (
     <View style={styles.container}>
       {visible.map((item) => {
-        const width = `${Math.max(4, (Math.abs(item.value) / max) * 100)}%`;
+        const width = `${Math.max(4, (Math.abs(item.value) / max) * 100)}%` as `${number}%`;
         const positive = item.value >= 0;
 
         return (

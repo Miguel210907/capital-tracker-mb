@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { createAuditLog } from '../db/repositories/auditLogRepository';
-import { getAll, getFirst, withTransaction } from '../db/database';
+import { getAll, getFirst, sqlParams, withTransaction } from '../db/database';
 import type { Bet, BetStatus, ListFilter, Transaction } from '../domain/types';
 import { assertOdds, assertPositiveAmount, assertRequired } from '../domain/validators';
 import { nowIso, todayDbDate } from '../utils/dates';
@@ -230,7 +230,7 @@ export async function updatePendingBet(input: UpdatePendingBetInput): Promise<Be
            bet_description = ?, odds = ?, stake = ?, bookmaker_account_id = ?,
            source = ?, potential_return = ?, potential_profit = ?, notes = ?, updated_at = ?
        WHERE id = ?`,
-      [
+      sqlParams([
         next.date,
         next.event,
         next.sport,
@@ -247,7 +247,7 @@ export async function updatePendingBet(input: UpdatePendingBetInput): Promise<Be
         next.notes,
         next.updated_at,
         next.id,
-      ],
+      ]),
     );
 
     await insertTransactionWithBalance(
@@ -349,7 +349,7 @@ async function settleBetInTransaction(
     `UPDATE bets
      SET status = ?, result = ?, profit_loss = ?, settled_at = ?, notes = ?, updated_at = ?
      WHERE id = ?`,
-    [
+    sqlParams([
       next.status,
       next.result,
       next.profit_loss,
@@ -357,7 +357,7 @@ async function settleBetInTransaction(
       next.notes,
       next.updated_at,
       next.id,
-    ],
+    ]),
   );
 
   if (settlement.liquidationAmount !== 0) {
@@ -396,7 +396,7 @@ async function insertBet(db: SQLiteDatabase, bet: Bet): Promise<void> {
        potential_return, potential_profit, profit_loss, settled_at, notes,
        import_hash, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+    sqlParams([
       bet.id,
       bet.date,
       bet.event,
@@ -419,7 +419,7 @@ async function insertBet(db: SQLiteDatabase, bet: Bet): Promise<void> {
       bet.import_hash,
       bet.created_at,
       bet.updated_at,
-    ],
+    ]),
   );
 }
 
